@@ -1,25 +1,40 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import List
+import os
+
 
 class Settings(BaseSettings):
-    APP_NAME: str = "viral-content-ai"
-    APP_ENV: str = "development"
-    DEBUG: bool = True
-    SECRET_KEY: str = "changeme"
+    # App
+    APP_NAME: str = "Viral Content AI"
+    DEBUG: bool = False
 
-    OPENAI_API_KEY: str = ""
-    ANTHROPIC_API_KEY: str = ""
+    # JWT
+    SECRET_KEY: str = "super-secret-change-in-production-32chars"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    POSTGRES_URL: str = ""
-    MONGO_URL: str = "mongodb://localhost:27017/viral_content_db"
+    # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    CACHE_TTL: int = 300
 
-    INSTAGRAM_ACCESS_TOKEN: Optional[str] = ""
-    YOUTUBE_API_KEY: Optional[str] = ""
-    TWITTER_BEARER_TOKEN: Optional[str] = ""
-    TIKTOK_API_KEY: Optional[str] = ""
+    # Celery
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    class Config:
-        env_file = ".env"
+    # CORS
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+    ]
+
+    # Rate limiting
+    RATE_LIMIT_PER_MINUTE: int = 20
+
+    model_config = {
+        "env_file": ".env",
+        "extra": "ignore",        # ← ignore unknown env vars like GROQ_API_KEY
+    }
+
 
 settings = Settings()

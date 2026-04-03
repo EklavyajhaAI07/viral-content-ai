@@ -1,5 +1,5 @@
 from crewai import Agent, Task, Crew, Process
-from app.core.llm import CLAUDE_SONNET
+from app.core.llm import GROQ_SMART
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,14 +14,25 @@ strategist = Agent(
     content gaps, and growth forecasts. You think in systems, not single posts.""",
     verbose=True,
     allow_delegation=False,
-    llm=CLAUDE_SONNET
+    llm=GROQ_SMART
 )
 
-def create_strategy_task(topic: str, platform: str = "instagram", virality_score: int = 75) -> Task:
+def create_strategy_task(
+    topic: str, 
+    platform: str = "instagram", 
+    virality_score: int = 75,
+    geo=None,
+    shared_context: dict = None
+) -> Task:
+    
+    geo_info = ""
+    if geo:
+        geo_info = f"\n        Target Geography: {getattr(geo, 'country', 'global')}"
+
     return Task(
         description=f"""Create a complete content strategy for:
         Topic: '{topic}'
-        Primary Platform: {platform}
+        Primary Platform: {platform}{geo_info}
         Virality Score: {virality_score}/100
 
         Deliver ALL of the following:
@@ -55,15 +66,26 @@ def create_strategy_task(topic: str, platform: str = "instagram", virality_score
         agent=strategist
     )
 
-def run_strategist(topic: str, platform: str = "instagram", virality_score: int = 75) -> dict:
-    task = create_strategy_task(topic, platform, virality_score)
+def run_strategist(
+    topic: str, 
+    platform: str = "instagram", 
+    virality_score: int = 75,
+    geo=None,
+    shared_context: dict = None,
+    model_override: str = None
+) -> dict:
+    
+    task = create_strategy_task(topic, platform, virality_score, geo, shared_context)
+    
     crew = Crew(
         agents=[strategist],
         tasks=[task],
         process=Process.sequential,
         verbose=True
     )
+    
     result = crew.kickoff()
+    
     return {
         "topic": topic,
         "platform": platform,

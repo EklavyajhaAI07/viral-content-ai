@@ -1,5 +1,5 @@
 from crewai import Agent, Task, Crew, Process
-from app.core.llm import GPT4O
+from app.core.llm import GROQ_SMART
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,12 +14,24 @@ virality_predictor = Agent(
     reasoning and actionable improvements.""",
     verbose=True,
     allow_delegation=False,
-    llm=GPT4O
+    llm=GROQ_SMART
 )
 
-def create_virality_task(topic: str, caption: str = "", hashtags: str = "", platform: str = "instagram") -> Task:
+def create_virality_task(
+    topic: str, 
+    caption: str = "", 
+    hashtags: str = "", 
+    platform: str = "instagram",
+    geo=None,
+    shared_context: dict = None
+) -> Task:
+    
+    geo_info = ""
+    if geo:
+        geo_info = f"\n        Target Audience Location: {getattr(geo, 'country', 'global')} | Style: {getattr(geo, 'content_style', 'global')}"
+
     return Task(
-        description=f"""Analyze this content for viral potential:
+        description=f"""Analyze this content for viral potential:{geo_info}
 
         Topic: '{topic}'
         Caption: '{caption if caption else "Not provided - analyze topic only"}'
@@ -47,15 +59,27 @@ def create_virality_task(topic: str, caption: str = "", hashtags: str = "", plat
         agent=virality_predictor
     )
 
-def run_virality_predictor(topic: str, caption: str = "", hashtags: str = "", platform: str = "instagram") -> dict:
-    task = create_virality_task(topic, caption, hashtags, platform)
+def run_virality_predictor(
+    topic: str, 
+    caption: str = "", 
+    hashtags: str = "", 
+    platform: str = "instagram",
+    geo=None,
+    shared_context: dict = None,
+    model_override: str = None
+) -> dict:
+    
+    task = create_virality_task(topic, caption, hashtags, platform, geo, shared_context)
+    
     crew = Crew(
         agents=[virality_predictor],
         tasks=[task],
         process=Process.sequential,
         verbose=True
     )
+    
     result = crew.kickoff()
+    
     return {
         "topic": topic,
         "platform": platform,

@@ -1,5 +1,5 @@
 from crewai import Agent, Task, Crew, Process
-from app.core.llm import CLAUDE_SONNET
+from app.core.llm import GROQ_SMART
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,21 +17,48 @@ content_optimizer = Agent(
     and you speak all of them fluently.""",
     verbose=True,
     allow_delegation=False,
-    llm=CLAUDE_SONNET
+    llm=GROQ_SMART  # <--- CHANGED TO FREE GROQ API
 )
 
 # ─── TASK FACTORY ─────────────────────────────────────
 
-def create_content_task(topic: str, platform: str = "instagram", tone: str = "engaging", target_audience: str = "general") -> Task:
+def create_content_task(
+    topic: str, 
+    platform: str = "instagram", 
+    tone: str = "engaging", 
+    target_audience: str = "general",
+    geo=None,
+    shared_context: dict = None
+) -> Task:
+    
+    # Safely extract Geo Context
+    geo_info = ""
+    if geo:
+        geo_info = f"\n        Geo Target: {getattr(geo, 'country', 'global')} | Local Style: {getattr(geo, 'content_style', 'global')}"
+
+    # Safely extract Shared Context (Outputs from Steps 1 & 2)
+    trend_data = "No specific trend data provided."
+    algo_data = "No specific algorithm data provided."
+    if shared_context:
+        # We use .get() heavily to prevent dictionary key errors
+        trend_data = shared_context.get("trends", {}).get("trends", trend_data)
+        algo_data = shared_context.get("algo", {}).get("algo_analysis", algo_data)
+
     return Task(
         description=f"""Create fully optimized content for this topic:
 
         Topic: '{topic}'
         Primary Platform: {platform}
         Tone: {tone}
-        Target Audience: {target_audience}
+        Target Audience: {target_audience}{geo_info}
 
-        Deliver ALL of the following:
+        === REAL-TIME TRENDS (From Trend Scout) ===
+        {trend_data}
+
+        === ALGORITHM SIGNALS (From Algorithm Analyst) ===
+        {algo_data}
+
+        Deliver ALL of the following using the trends and algorithm signals above:
 
         1. HOOK (first 1-2 lines that stop the scroll)
         2. FULL CAPTION optimized for {platform}
@@ -57,8 +84,18 @@ def create_content_task(topic: str, platform: str = "instagram", tone: str = "en
 
 # ─── RUNNER ───────────────────────────────────────────
 
-def run_content_optimizer(topic: str, platform: str = "instagram", tone: str = "engaging", target_audience: str = "general") -> dict:
-    task = create_content_task(topic, platform, tone, target_audience)
+def run_content_optimizer(
+    topic: str, 
+    platform: str = "instagram", 
+    tone: str = "engaging", 
+    target_audience: str = "general",
+    geo=None,
+    shared_context: dict = None,
+    model_override: str = None
+) -> dict:
+    
+    # Pass the new arguments down to the task factory
+    task = create_content_task(topic, platform, tone, target_audience, geo, shared_context)
 
     crew = Crew(
         agents=[content_optimizer],

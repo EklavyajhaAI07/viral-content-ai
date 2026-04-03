@@ -17,7 +17,7 @@ trend_scout = Agent(
 )
 
 
-def create_trend_task(topic: str, platform: str = "all", real_data: dict = None) -> Task:
+def create_trend_task(topic: str, platform: str = "all", real_data: dict = None, geo=None, shared_context: dict = None) -> Task:
     data_context = ""
     if real_data:
         yt_videos = real_data.get("youtube_trending", {}).get("videos", [])[:5]
@@ -37,9 +37,18 @@ YouTube Trending Videos (last 3 days):
 {chr(10).join(f'- {t}' for t in yt_titles)}
 """
 
+    # Inject the Orchestrator's new Geo and Context data
+    geo_info = ""
+    if geo:
+        geo_info = f"\nGeo Target: {getattr(geo, 'country', 'global')} | Style: {getattr(geo, 'content_style', 'global')}"
+
+    context_info = ""
+    if shared_context:
+        context_info = f"\nAudience: {shared_context.get('audience')} | Tone: {shared_context.get('tone')}"
+
     return Task(
         description=f"""Analyze trend data for: '{topic}' on {platform}.
-
+{geo_info}{context_info}
 {data_context}
 
 Using the real data above, provide:
@@ -58,18 +67,31 @@ Format as structured data.""",
     )
 
 
-def run_trend_scout(topic: str, platform: str = "all", real_data: dict = None) -> dict:
-    task = create_trend_task(topic, platform, real_data)
+def run_trend_scout(
+    topic: str, 
+    platform: str = "all", 
+    real_data: dict = None,
+    geo=None,
+    shared_context: dict = None,
+    model_override: str = None
+) -> dict:
+    
+    # Pass the new context down into the task
+    task = create_trend_task(topic, platform, real_data, geo, shared_context)
+    
     crew = Crew(
         agents=[trend_scout],
         tasks=[task],
         process=Process.sequential,
         verbose=False,
     )
+    
     result = crew.kickoff()
+    
     return {
         "topic": topic,
         "platform": platform,
+        "geo": getattr(geo, "country", "global") if geo else "global",
         "trends": str(result),
         "status": "completed",
     }

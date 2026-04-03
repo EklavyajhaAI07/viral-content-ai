@@ -1,67 +1,75 @@
 from crewai import Agent, Task, Crew, Process
 from app.core.llm import GPT4O_MINI
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
-# ─── AGENT ────────────────────────────────────────────
-
 trend_scout = Agent(
     role="Trend Scout",
-    goal="Find the latest trending topics, hashtags, and viral content patterns on social media",
-    backstory="""You are an expert social media analyst who tracks viral trends 
-    across Instagram, TikTok, YouTube, and Twitter in real time. You know what 
-    content is blowing up right now and why. You classify trends by niche and 
-    score them by velocity — how fast they are growing.""",
-    verbose=True,
+    goal="Analyze real social media trend data and extract actionable viral insights",
+    backstory="""You are an expert social media analyst who interprets real-time 
+    trend data from Google Trends and YouTube. You receive actual live data and 
+    extract the most viral patterns, score velocity, and predict peak timing. 
+    You classify trends by niche and give specific hashtag recommendations.""",
+    verbose=False,
     allow_delegation=False,
-    llm=GPT4O_MINI
+    llm=GPT4O_MINI,
 )
 
-# ─── TASK FACTORY ─────────────────────────────────────
 
-def create_trend_task(topic: str, platform: str = "all") -> Task:
+def create_trend_task(topic: str, platform: str = "all", real_data: dict = None) -> Task:
+    data_context = ""
+    if real_data:
+        yt_videos = real_data.get("youtube_trending", {}).get("videos", [])[:5]
+        yt_titles = [v["title"] for v in yt_videos]
+        rising    = real_data.get("rising_topics", [])
+        hashtags  = real_data.get("suggested_hashtags", [])
+        google_q  = [q["query"] for q in real_data.get("google_trends", {}).get("related_queries", [])]
+
+        data_context = f"""
+REAL-TIME DATA (use this as your primary source):
+
+Google Trends Rising Queries: {', '.join(google_q[:10])}
+Rising Topics: {', '.join(rising[:5])}
+Suggested Hashtags from Google: {', '.join(hashtags[:10])}
+
+YouTube Trending Videos (last 3 days):
+{chr(10).join(f'- {t}' for t in yt_titles)}
+"""
+
     return Task(
-        description=f"""Research current trending topics related to: '{topic}'
-        Platform focus: {platform}
-        
-        Find and return:
-        1. Top 10 trending hashtags related to this topic right now
-        2. Current viral content patterns in this niche
-        3. Velocity score for each trend (0-100, how fast it's growing)
-        4. Which platforms each trend is strongest on
-        5. Predicted peak time in hours (when will it peak?)
-        6. Niche classification (tech/fashion/food/fitness/finance/entertainment)
-        
-        Format your response as structured data.""",
-        expected_output="""A structured list of 10 trends, each with:
-        - topic name
-        - hashtags (list)
-        - platforms (list) 
-        - velocity_score (0-100)
-        - niche
-        - peak_prediction_hours (number)""",
-        agent=trend_scout
+        description=f"""Analyze trend data for: '{topic}' on {platform}.
+
+{data_context}
+
+Using the real data above, provide:
+1. Top 10 trending hashtags (mix real ones from data + your analysis)
+2. Viral content patterns emerging RIGHT NOW in this niche
+3. Velocity score for each trend (0-100)
+4. Which platforms each trend is strongest on
+5. Predicted peak time in hours
+6. Niche classification
+7. Top 3 content angles with highest viral potential
+
+Format as structured data.""",
+        expected_output="""Structured trend report with 10 hashtags, velocity scores, 
+        platform breakdown, peak predictions, and 3 viral content angles.""",
+        agent=trend_scout,
     )
 
-# ─── RUNNER ───────────────────────────────────────────
 
-def run_trend_scout(topic: str, platform: str = "all") -> dict:
-    task = create_trend_task(topic, platform)
-    
+def run_trend_scout(topic: str, platform: str = "all", real_data: dict = None) -> dict:
+    task = create_trend_task(topic, platform, real_data)
     crew = Crew(
         agents=[trend_scout],
         tasks=[task],
         process=Process.sequential,
-        verbose=True
+        verbose=False,
     )
-    
     result = crew.kickoff()
-    
     return {
         "topic": topic,
         "platform": platform,
         "trends": str(result),
-        "status": "completed"
+        "status": "completed",
     }

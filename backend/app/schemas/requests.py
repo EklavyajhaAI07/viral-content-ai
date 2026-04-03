@@ -1,9 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 from enum import Enum
 
 
-class Platform(str, Enum):
+class PlatformEnum(str, Enum):
     instagram = "instagram"
     tiktok = "tiktok"
     youtube = "youtube"
@@ -12,94 +12,71 @@ class Platform(str, Enum):
     all = "all"
 
 
-class Tone(str, Enum):
+class ToneEnum(str, Enum):
     engaging = "engaging"
-    motivational = "motivational"
+    exciting = "exciting"
     professional = "professional"
     funny = "funny"
-    educational = "educational"
     inspirational = "inspirational"
+    educational = "educational"
 
 
-# ── Auth ──────────────────────────────────────────────
-class RegisterRequest(BaseModel):
-    email: str
-    password: str = Field(..., min_length=6)
-    name: str
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
-    user: dict
-
-
-# ── Analyze ───────────────────────────────────────────
 class AnalyzeRequest(BaseModel):
-    topic: str = Field(..., min_length=3, max_length=300)
-    platform: Platform = Platform.instagram
-    tone: Tone = Tone.engaging
-    target_audience: str = Field(default="general", max_length=100)
-    caption: Optional[str] = Field(default="", max_length=2000)
-    hashtags: Optional[str] = Field(default="", max_length=500)
+    topic: str
+    platform: PlatformEnum = PlatformEnum.instagram
+    tone: ToneEnum = ToneEnum.engaging
+    target_audience: Optional[str] = "general"
+    caption: Optional[str] = ""
+    hashtags: Optional[str] = ""
+
 
 class AnalyzeResponse(BaseModel):
     job_id: str
     topic: str
     platform: str
     status: str
-    virality_score: Optional[int] = None
-    virality_analysis: Optional[str] = None
-    content_package: Optional[str] = None
-    trends: Optional[str] = None
-    algorithm_guide: Optional[str] = None
-    strategy: Optional[str] = None
+    virality_score: int
+    virality_analysis: Optional[str]
+    content_package: Optional[str]
+    trends: Optional[str]
+    algorithm_guide: Optional[str]
+    strategy: Optional[str]
     cached: bool = False
-    elapsed_seconds: Optional[float] = None
+    elapsed_seconds: float = 0.0
 
 
-# ── Generate ──────────────────────────────────────────
 class GenerateRequest(BaseModel):
-    topic: str = Field(..., min_length=3, max_length=300)
-    platform: Platform = Platform.instagram
-    tone: Tone = Tone.engaging
-    target_audience: str = Field(default="general", max_length=100)
+    topic: str
+    platform: PlatformEnum = PlatformEnum.instagram
+    tone: ToneEnum = ToneEnum.engaging
+    target_audience: Optional[str] = "general"
+
 
 class GenerateResponse(BaseModel):
     job_id: str
     topic: str
     platform: str
-    content_package: Optional[str] = None
-    algorithm_guide: Optional[str] = None
-    strategy: Optional[str] = None
+    content_package: Optional[str]
+    algorithm_guide: Optional[str]
+    strategy: Optional[str]
     status: str
     cached: bool = False
-    elapsed_seconds: Optional[float] = None
+    elapsed_seconds: float = 0.0
 
 
-# ── Trends ────────────────────────────────────────────
-class TrendsRequest(BaseModel):
-    topic: str = Field(..., min_length=2, max_length=200)
-    platform: Platform = Platform.all
-
-class TrendsResponse(BaseModel):
-    job_id: str
-    topic: str
-    platform: str
-    trends: Optional[str] = None
-    status: str
-    cached: bool = False
-    elapsed_seconds: Optional[float] = None
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
 
 
-# ── Job Status ────────────────────────────────────────
-class JobStatus(BaseModel):
-    job_id: str
-    status: str
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    progress: Optional[int] = None
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int
+    user: dict

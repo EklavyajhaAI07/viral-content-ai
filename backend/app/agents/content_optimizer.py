@@ -1,114 +1,197 @@
+"""
+content_optimizer.py
+One agent — three focused task runners.
+Each runner has ONE prompt, ONE job, returns structured JSON.
+
+run_hook_only()      → POST /api/content/hook
+run_caption_only()   → POST /api/content/caption
+run_hashtags_only()  → POST /api/content/hashtags
+"""
+
+import json
+import re
 from crewai import Agent, Task, Crew, Process
 from app.core.llm import GROQ_SMART
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ─── AGENT ────────────────────────────────────────────
+# ─── SHARED AGENT ─────────────────────────────────────────────────────────────
+# One agent, different tasks per endpoint
 
 content_optimizer = Agent(
     role="Content Optimizer",
-    goal="Write high-converting captions, hooks, and hashtags optimized for maximum reach on every platform",
-    backstory="""You are a world-class copywriter and content strategist who has 
-    helped creators grow from 0 to millions of followers. You write captions that 
-    stop the scroll, hooks that demand attention, and build hashtag strategies that 
-    maximize discoverability. You adapt your tone and format natively for each 
-    platform — Instagram, TikTok, YouTube, and LinkedIn all have different languages 
-    and you speak all of them fluently.""",
-    verbose=True,
+    goal="Write high-converting social media content optimized for maximum reach",
+    backstory="""You are a world-class copywriter who has helped creators grow from 
+    0 to millions of followers. You write platform-native content that stops the 
+    scroll. You always respond ONLY in valid JSON — no markdown, no extra text.""",
+    verbose=False,
     allow_delegation=False,
-    llm=GROQ_SMART  # <--- CHANGED TO FREE GROQ API
+    llm=GROQ_SMART,
 )
 
-# ─── TASK FACTORY ─────────────────────────────────────
 
-def create_content_task(
-    topic: str, 
-    platform: str = "instagram", 
-    tone: str = "engaging", 
+# ─── TASK 1: HOOK ONLY ────────────────────────────────────────────────────────
+
+def run_hook_only(
+    topic: str,
+    platform: str = "instagram",
+    tone: str = "engaging",
     target_audience: str = "general",
-    geo=None,
-    shared_context: dict = None
-) -> Task:
-    
-    # Safely extract Geo Context
-    geo_info = ""
-    if geo:
-        geo_info = f"\n        Geo Target: {getattr(geo, 'country', 'global')} | Local Style: {getattr(geo, 'content_style', 'global')}"
-
-    # Safely extract Shared Context (Outputs from Steps 1 & 2)
-    trend_data = "No specific trend data provided."
-    algo_data = "No specific algorithm data provided."
-    if shared_context:
-        # We use .get() heavily to prevent dictionary key errors
-        trend_data = shared_context.get("trends", {}).get("trends", trend_data)
-        algo_data = shared_context.get("algo", {}).get("algo_analysis", algo_data)
-
-    return Task(
-        description=f"""Create fully optimized content for this topic:
-
-        Topic: '{topic}'
-        Primary Platform: {platform}
-        Tone: {tone}
-        Target Audience: {target_audience}{geo_info}
-
-        === REAL-TIME TRENDS (From Trend Scout) ===
-        {trend_data}
-
-        === ALGORITHM SIGNALS (From Algorithm Analyst) ===
-        {algo_data}
-
-        Deliver ALL of the following using the trends and algorithm signals above:
-
-        1. HOOK (first 1-2 lines that stop the scroll)
-        2. FULL CAPTION optimized for {platform}
-           - Instagram: 150-300 words, storytelling style, emojis
-           - TikTok: 50-100 words, punchy, trend-native language
-           - YouTube: SEO title + 200 word description
-           - LinkedIn: Professional tone, insight-driven, 100-150 words
-        3. HASHTAG STRATEGY (15 total):
-           - 5 niche hashtags (under 500k posts)
-           - 5 trending hashtags (500k-5M posts)
-           - 5 broad hashtags (5M+ posts)
-        4. CTA (call to action — what should the viewer do?)
-        5. 3 ALTERNATIVE HOOKS (different angles)
-        6. BEST POSTING TIME for {platform}
-        7. CONTENT FORMAT recommendation (Reel/Post/Story/Short/Thread)
-
-        Make it authentic, platform-native, and conversion-focused.""",
-        expected_output="""Complete content package with hook, full caption, 
-        15 hashtags in 3 tiers, CTA, 3 alternative hooks, best posting time, 
-        and format recommendation.""",
-        agent=content_optimizer
-    )
-
-# ─── RUNNER ───────────────────────────────────────────
-
-def run_content_optimizer(
-    topic: str, 
-    platform: str = "instagram", 
-    tone: str = "engaging", 
-    target_audience: str = "general",
-    geo=None,
-    shared_context: dict = None,
-    model_override: str = None
 ) -> dict:
-    
-    # Pass the new arguments down to the task factory
-    task = create_content_task(topic, platform, tone, target_audience, geo, shared_context)
+    """
+    Single focused prompt: generate hooks only.
+    Returns: { hook, alternative_hooks, cta, format_recommendation }
+    """
+    task = Task(
+        description=f"""Write scroll-stopping hooks for this content.
 
-    crew = Crew(
-        agents=[content_optimizer],
-        tasks=[task],
-        process=Process.sequential,
-        verbose=True
+Topic: '{topic}'
+Platform: {platform}
+Tone: {tone}
+Target Audience: {target_audience}
+
+Platform hook rules:
+- Instagram/TikTok: Emotionally charged, curiosity gap, max 2 lines
+- YouTube: Bold claim or question in first 5 seconds
+- LinkedIn: Insight-led, contrarian or data-backed opener
+
+Return ONLY this JSON (no markdown, no explanation):
+{{
+  "hook": "the single best hook line",
+  "alternative_hooks": [
+    "angle 1 — curiosity gap",
+    "angle 2 — bold statement",
+    "angle 3 — story opener"
+  ],
+  "cta": "one clear call-to-action sentence",
+  "format_recommendation": "Reel|Post|Story|Short|Thread|Video"
+}}""",
+        expected_output='JSON with hook, alternative_hooks array, cta, format_recommendation',
+        agent=content_optimizer,
     )
 
-    result = crew.kickoff()
+    crew = Crew(agents=[content_optimizer], tasks=[task], process=Process.sequential, verbose=False)
+    raw = str(crew.kickoff())
+    return _parse_json(raw, fallback={
+        "hook": f"You won't believe what happened with {topic}...",
+        "alternative_hooks": [
+            f"The truth about {topic} nobody tells you",
+            f"I tried {topic} for 30 days — here's what happened",
+            f"Stop doing {topic} wrong. Here's why:",
+        ],
+        "cta": "Save this post and try it today!",
+        "format_recommendation": "Reel",
+    })
 
-    return {
-        "topic": topic,
-        "platform": platform,
-        "content_package": str(result),
-        "status": "completed"
+
+# ─── TASK 2: CAPTION ONLY ─────────────────────────────────────────────────────
+
+def run_caption_only(
+    topic: str,
+    platform: str = "instagram",
+    tone: str = "engaging",
+    target_audience: str = "general",
+    hook: str = "",
+) -> dict:
+    """
+    Single focused prompt: generate a full platform-native caption.
+    Accepts optional hook to continue from.
+    Returns: { caption, best_posting_time, word_count }
+    """
+    hook_context = f"\nOpen with this hook: \"{hook}\"" if hook else ""
+
+    platform_rules = {
+        "instagram": "150-300 words, storytelling arc, 3-5 emojis, line breaks for readability",
+        "tiktok": "50-100 words, punchy, trend-native slang, energetic",
+        "youtube": "SEO-optimised title (60 chars) + 150-200 word description with keywords",
+        "linkedin": "100-150 words, professional, insight-driven, no emojis",
+        "twitter": "Under 280 chars, punchy, one strong opinion or hook",
     }
+    rules = platform_rules.get(platform.lower(), platform_rules["instagram"])
+
+    task = Task(
+        description=f"""Write a full {platform} caption for this topic.
+
+Topic: '{topic}'
+Tone: {tone}
+Target Audience: {target_audience}{hook_context}
+
+Caption rules for {platform}: {rules}
+
+Return ONLY this JSON (no markdown, no explanation):
+{{
+  "caption": "the full caption text here",
+  "best_posting_time": "e.g. Tuesday 7-9pm",
+  "word_count": 180
+}}""",
+        expected_output='JSON with caption, best_posting_time, word_count',
+        agent=content_optimizer,
+    )
+
+    crew = Crew(agents=[content_optimizer], tasks=[task], process=Process.sequential, verbose=False)
+    raw = str(crew.kickoff())
+    return _parse_json(raw, fallback={
+        "caption": f"Here's everything you need to know about {topic}. This changed how I think about content completely. Drop a 🔥 if you agree!",
+        "best_posting_time": "Tuesday–Thursday, 7–9 PM",
+        "word_count": 25,
+    })
+
+
+# ─── TASK 3: HASHTAGS ONLY ────────────────────────────────────────────────────
+
+def run_hashtags_only(
+    topic: str,
+    platform: str = "instagram",
+) -> dict:
+    """
+    Single focused prompt: generate a 3-tier hashtag strategy.
+    Returns: { niche, trending, broad, total_count }
+    """
+    task = Task(
+        description=f"""Create a 3-tier hashtag strategy for {platform}.
+
+Topic: '{topic}'
+Platform: {platform}
+
+Tier rules:
+- niche: 5 hashtags, under 500k posts, very specific to the topic
+- trending: 5 hashtags, 500k–5M posts, currently popular in this niche
+- broad: 5 hashtags, 5M+ posts, wide reach
+
+Return ONLY this JSON (no markdown, no explanation):
+{{
+  "niche": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+  "trending": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+  "broad": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+  "total_count": 15
+}}""",
+        expected_output='JSON with niche, trending, broad arrays and total_count',
+        agent=content_optimizer,
+    )
+
+    crew = Crew(agents=[content_optimizer], tasks=[task], process=Process.sequential, verbose=False)
+    raw = str(crew.kickoff())
+    slug = topic.lower().replace(" ", "")
+    return _parse_json(raw, fallback={
+        "niche": [f"#{slug}tips", f"#{slug}life", f"#{slug}hack", f"#{slug}daily", f"#{slug}101"],
+        "trending": [f"#{slug}", f"#{platform}{slug.title()}", "#ContentCreator", "#Viral2025", "#TrendingNow"],
+        "broad": ["#viral", "#explore", "#reels", "#trending", "#fyp"],
+        "total_count": 15,
+    })
+
+
+# ─── JSON PARSER ──────────────────────────────────────────────────────────────
+
+def _parse_json(raw: str, fallback: dict) -> dict:
+    """Safely extract JSON from LLM output. Falls back to safe defaults."""
+    try:
+        # Strip markdown code fences if present
+        cleaned = re.sub(r"```(?:json)?|```", "", raw).strip()
+        # Find first { ... } block
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except Exception:
+        pass
+    return fallback

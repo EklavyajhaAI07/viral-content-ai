@@ -11,7 +11,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────
-STABILITY_API_KEY = "sk-sTEOyiA4fKF2f08vZxLECTNjKNIyweoRRsujNOJHDq30OogK"
+STABILITY_API_KEY = "sk-p8hwXR82EXldrBWwD2xPYyA5Vgin6svQGYUjNIP9NEnVvp3h"
 
 PLATFORM_STYLES = {
     "instagram": "cinematic fitness influencer, luxury gym Mumbai, 8k, vertical 9:16",
@@ -105,3 +105,5 @@ async def generate_thumbnail(topic: str, platform: str = "instagram", **kwargs) 
         result = await generate_via_pollinations(full_prompt, platform)
 
     return result
+
+'backend\app\services\thumbnail_service.py'

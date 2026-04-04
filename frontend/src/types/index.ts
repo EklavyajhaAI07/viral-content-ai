@@ -1,66 +1,103 @@
-// ── Auth ──
-export interface User {
-  id: number;
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: string;
   email: string;
-  username: string;
-  full_name: string | null;
-  plan: string;
-  is_active: boolean;
+  name: string;
 }
 
 export interface AuthResponse {
   access_token: string;
   token_type: string;
-  user: User;
+  expires_in: number;
+  user: AuthUser;
 }
 
-// ── Trends ──
-export interface TrendItem {
-  topic: string;
-  hashtags: string[];
-  platforms: string[];
-  velocity_score: number;
-  niche: string;
-  peak_prediction_hours: number;
-  status: "emerging" | "peak" | "declining";
+
+// ─── TRENDS ───────────────────────────────────────────────────────────────────
+// GET /api/trends
+
+export interface HashtagItem {
+  tag: string;
+  velocity: number;           // 0–100
+  strongest_on: string;       // "instagram" | "tiktok" | etc.
+  peak_in_hours: number;
+}
+
+export interface ViralAngle {
+  angle: string;
+  description: string;
+  virality_score: number;     // 0–100
 }
 
 export interface TrendResponse {
-  status: string;
-  source: string;
-  data: {
-    topic: string;
-    platform: string;
-    trends: TrendItem[];
-  };
-  generated_at: string;
-}
-
-// ── Content ──
-export interface ContentData {
-  hook: string;
-  caption: string;
-  hashtags: {
-    niche: string[];
-    trending: string[];
-    broad: string[];
-  };
-  cta: string;
-  alternative_hooks: string[];
-  best_posting_time: string;
-  content_format: string;
+  job_id: string;
+  topic: string;
   platform: string;
-  tone: string;
-}
-
-export interface ContentResponse {
+  hashtags: HashtagItem[];
+  viral_angles: ViralAngle[];
+  niche_classification: string;
+  overall_trend_velocity: number;
+  has_real_data: boolean;
   status: string;
-  source: string;
-  data: ContentData;
-  generated_at: string;
+  cached: boolean;
+  elapsed_seconds: number;
 }
 
-// ── Virality ──
+
+// ─── CONTENT: HOOK ────────────────────────────────────────────────────────────
+// POST /api/content/hook
+
+export interface HookResponse {
+  job_id: string;
+  topic: string;
+  platform: string;
+  hook: string;
+  alternative_hooks: string[];  // always 3 items
+  cta: string;
+  format_recommendation: string;
+  status: string;
+  cached: boolean;
+  elapsed_seconds: number;
+}
+
+
+// ─── CONTENT: CAPTION ─────────────────────────────────────────────────────────
+// POST /api/content/caption
+
+export interface CaptionResponse {
+  job_id: string;
+  topic: string;
+  platform: string;
+  caption: string;
+  best_posting_time: string;
+  word_count: number;
+  status: string;
+  cached: boolean;
+  elapsed_seconds: number;
+}
+
+
+// ─── CONTENT: HASHTAGS ────────────────────────────────────────────────────────
+// POST /api/content/hashtags
+
+export interface HashtagResponse {
+  job_id: string;
+  topic: string;
+  platform: string;
+  niche: string[];      // 5 tags — under 500k posts
+  trending: string[];   // 5 tags — 500k–5M posts
+  broad: string[];      // 5 tags — 5M+ posts
+  total_count: number;  // always 15
+  status: string;
+  cached: boolean;
+  elapsed_seconds: number;
+}
+
+
+// ─── CONTENT: VIRALITY ────────────────────────────────────────────────────────
+// POST /api/content/predict-virality
+
 export interface ViralityBreakdown {
   hook_strength: number;
   hashtag_relevance: number;
@@ -69,49 +106,74 @@ export interface ViralityBreakdown {
   posting_time_fit: number;
 }
 
-export interface ViralityData {
-  virality_score: number;
-  confidence: number;
-  grade: string;
-  breakdown: ViralityBreakdown;
-  predicted_reach: number;
-  predicted_engagement_rate: number;
-  improvements: string[];
-  rewritten_hook: string;
-}
-
 export interface ViralityResponse {
-  status: string;
-  source: string;
-  data: ViralityData;
-  generated_at: string;
-}
-
-// ── Strategy ──
-export interface CalendarDay {
-  day: string;
-  date: string;
-  platform: string;
-  content_type: string;
-  topic_angle: string;
-  post_time: string;
-  priority: string;
-}
-
-export interface StrategyData {
+  job_id: string;
   topic: string;
   platform: string;
-  calendar: CalendarDay[];
-  repurposing_plan: Record<string, string>;
-  growth_strategy: Record<string, { title: string; actions: string[] }>;
-  content_gaps: Array<{ gap: string; opportunity: string; viral_potential: string }>;
-  ab_tests: Array<{ element: string; variant_a: string; variant_b: string; metric: string }>;
-  forecast_30_day: Record<string, string>;
+  overall_score: number;        // 0–100
+  grade: string;                // A+ | A | B+ | B | C+ | C | D | F
+  confidence: number;           // 0.0–1.0
+  predicted_reach: number;
+  predicted_engagement_rate: number;
+  breakdown: ViralityBreakdown;
+  improvements: string[];       // always 3 items
+  rewritten_hook: string;
+  status: string;
+  cached: boolean;
+  elapsed_seconds: number;
 }
 
-export interface StrategyResponse {
+
+// ─── CONTENT: THUMBNAIL ───────────────────────────────────────────────────────
+// POST /api/content/thumbnail
+
+export interface ThumbnailData {
+  url: string;
+  path: string;
   status: string;
-  source: string;
-  data: StrategyData;
-  generated_at: string;
+  source: string;   // "stability" | "pollinations"
 }
+
+export interface ThumbnailResponse {
+  job_id: string;
+  topic: string;
+  platform: string;
+  thumbnail: ThumbnailData;
+  status: string;
+  elapsed_seconds: number;
+}
+
+
+// ─── STRATEGY ─────────────────────────────────────────────────────────────────
+// POST /api/strategy/generate
+
+export interface StrategyResponse {
+  job_id: string;
+  topic: string;
+  platform: string;
+  strategy: string;   // full markdown text from Strategist agent
+  status: string;
+  cached: boolean;
+  elapsed_seconds: number;
+}
+
+
+// ─── SHARED ───────────────────────────────────────────────────────────────────
+
+export type Platform =
+  | "instagram"
+  | "tiktok"
+  | "youtube"
+  | "linkedin"
+  | "twitter"
+  | "all";
+
+export type Tone =
+  | "engaging"
+  | "exciting"
+  | "professional"
+  | "funny"
+  | "inspirational"
+  | "educational";
+
+export type Grade = "A+" | "A" | "B+" | "B" | "C+" | "C" | "D" | "F";

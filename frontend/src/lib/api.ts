@@ -2,52 +2,72 @@ import axios, { AxiosError } from "axios";
 import type {
   AuthResponse,
   TrendResponse,
-  ContentResponse,
+  HookResponse,
+  CaptionResponse,
+  HashtagResponse,
   ViralityResponse,
+  ThumbnailResponse,
   StrategyResponse,
 } from "@/types";
 
-// ✅ Base URL (env + fallback)
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// ─── Axios Instance ───────────────────────────────────────────────────────────
 
-// ✅ Axios instance
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 120000,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
 });
 
-// ✅ Helper for token (SAFE for SSR)
-const getToken = () => {
+// ─── Token helper ─────────────────────────────────────────────────────────────
+
+const getToken = (): string | null => {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("token");
 };
 
-// ✅ Attach token automatically
+// ─── Request interceptor — attach JWT on every request ───────────────────────
+
 api.interceptors.request.use((config) => {
   const token = getToken();
-
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-
   return config;
 });
 
-// ─────────────────────────────
-// 🔐 AUTH API
-// ─────────────────────────────
+// ─── Response interceptor — auto-logout on 401 ───────────────────────────────
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// Backend RegisterRequest: { email, name, password }
+// Backend LoginRequest:    { email, password }
+// Both return plain JSON — no form-encoding needed.
+
 export const authAPI = {
   register: async (data: {
     email: string;
-    username: string;
+    name: string;
     password: string;
-    full_name?: string;
   }): Promise<AuthResponse> => {
-    const res = await api.post("/api/auth/register", data);
+    const res = await api.post("/api/auth/register", {
+      email: data.email,
+      name: data.name,
+      password: data.password,
+    });
     return res.data;
   },
 
@@ -55,80 +75,117 @@ export const authAPI = {
     email: string;
     password: string;
   }): Promise<AuthResponse> => {
-    const res = await api.post("/api/auth/login", data);
+    const res = await api.post("/api/auth/login", {
+      email: data.email,
+      password: data.password,
+    });
     return res.data;
   },
 
-  getMe: async () => {
+  getMe: async (): Promise<AuthResponse["user"]> => {
     const res = await api.get("/api/auth/me");
     return res.data;
   },
 };
 
-// ─────────────────────────────
-// 📈 TRENDS API
-// ─────────────────────────────
+
+// ─── TRENDS ───────────────────────────────────────────────────────────────────
+// GET /api/trends?topic=&platform=
+
 export const trendsAPI = {
   discover: async (data: {
     topic: string;
     platform?: string;
   }): Promise<TrendResponse> => {
-    const res = await api.post("/api/trends/discover", data);
+    const res = await api.get("/api/trends", {
+      params: { topic: data.topic, platform: data.platform ?? "all" },
+    });
     return res.data;
   },
 };
 
-// ─────────────────────────────
-// ✍️ CONTENT API
-// ─────────────────────────────
+
+// ─── CONTENT ──────────────────────────────────────────────────────────────────
+
 export const contentAPI = {
-  generate: async (data: {
+
+  generateHook: async (data: {
     topic: string;
     platform?: string;
     tone?: string;
     target_audience?: string;
-  }): Promise<ContentResponse> => {
-    const res = await api.post("/api/content/generate", data);
+  }): Promise<HookResponse> => {
+    const res = await api.post("/api/content/hook", data);
+    return res.data;
+  },
+
+  generateCaption: async (data: {
+    topic: string;
+    platform?: string;
+    tone?: string;
+    target_audience?: string;
+    hook?: string;
+  }): Promise<CaptionResponse> => {
+    const res = await api.post("/api/content/caption", data);
+    return res.data;
+  },
+
+  generateHashtags: async (data: {
+    topic: string;
+    platform?: string;
+  }): Promise<HashtagResponse> => {
+    const res = await api.post("/api/content/hashtags", data);
     return res.data;
   },
 
   predictVirality: async (data: {
     topic: string;
+    platform?: string;
     caption?: string;
     hashtags?: string;
-    platform?: string;
   }): Promise<ViralityResponse> => {
     const res = await api.post("/api/content/predict-virality", data);
     return res.data;
   },
+
+  generateThumbnail: async (data: {
+    topic: string;
+    platform?: string;
+    tone?: string;
+  }): Promise<ThumbnailResponse> => {
+    const res = await api.post("/api/content/thumbnail", data);
+    return res.data;
+  },
 };
 
-// ─────────────────────────────
-// 📊 STRATEGY API
-// ─────────────────────────────
+
+// ─── STRATEGY ─────────────────────────────────────────────────────────────────
+// POST /api/strategy/generate
+
 export const strategyAPI = {
   generate: async (data: {
     topic: string;
     platform?: string;
+    virality_score?: number;
   }): Promise<StrategyResponse> => {
     const res = await api.post("/api/strategy/generate", data);
     return res.data;
   },
 };
 
-// ─────────────────────────────
-// ❤️ HEALTH API
-// ─────────────────────────────
+
+// ─── HEALTH ───────────────────────────────────────────────────────────────────
+
 export const healthAPI = {
   check: async () => {
-    const res = await api.get("/api/health");
+    const res = await api.get("/health");
     return res.data;
   },
 };
 
-// ─────────────────────────────
-// ❌ ERROR HANDLER
-// ─────────────────────────────
+
+// ─── ERROR HANDLER ────────────────────────────────────────────────────────────
+
 type ApiErrorPayload = {
   detail?: string;
   message?: string;
@@ -137,9 +194,8 @@ type ApiErrorPayload = {
 export function getApiErrorMessage(
   error: unknown,
   fallback = "Something went wrong.",
-) {
+): string {
   const axiosError = error as AxiosError<ApiErrorPayload>;
-
   return (
     axiosError.response?.data?.detail ||
     axiosError.response?.data?.message ||

@@ -1,25 +1,62 @@
+"""
+routes/trends.py
+GET /api/trends?topic=&platform=
+
+Runs Trend Scout agent only.
+Returns structured hashtags + viral angles JSON.
+"""
+
 from fastapi import APIRouter, Depends, Query
-from app.services.crew_service import run_trends
-from app.tools.trend_engine import fetch_all_trends
+from pydantic import BaseModel
+from typing import List
+
+from app.services.crew_service import service_get_trends
 from app.core.security import get_current_user
 
 router = APIRouter()
 
 
-@router.get("/trends")
-async def trends(
+# ─── RESPONSE SCHEMA ──────────────────────────────────────────────────────────
+
+class HashtagItem(BaseModel):
+    tag: str
+    velocity: int
+    strongest_on: str
+    peak_in_hours: int
+
+class ViralAngle(BaseModel):
+    angle: str
+    description: str
+    virality_score: int
+
+class TrendsResponse(BaseModel):
+    job_id: str
+    topic: str
+    platform: str
+    hashtags: List[HashtagItem]
+    viral_angles: List[ViralAngle]
+    niche_classification: str
+    overall_trend_velocity: int
+    has_real_data: bool
+    status: str
+    cached: bool
+    elapsed_seconds: float
+
+
+# ─── ENDPOINT ─────────────────────────────────────────────────────────────────
+
+@router.get("", response_model=TrendsResponse, summary="Discover trends for a topic")
+async def get_trends(
     topic: str = Query(..., min_length=2, description="Topic to find trends for"),
-    platform: str = Query(default="all", description="instagram|tiktok|youtube|linkedin|twitter|all"),
-    raw: bool = Query(default=False, description="Return raw API data without AI analysis"),
+    platform: str = Query(default="all", description="Target platform: instagram | tiktok | youtube | all"),
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Returns real trending data from Google Trends + YouTube,
-    analyzed by the Trend Scout AI agent.
-    """
-    if raw:
-        # Skip AI — return raw data instantly
-        data = await fetch_all_trends(topic, platform)
-        return {"topic": topic, "platform": platform, "raw_data": data, "status": "completed"}
+    Runs **Trend Scout** agent only.
 
-    return await run_trends(topic, platform)
+    - Fetches real data from Google Trends + YouTube API first
+    - Passes real data to agent for analysis
+    - Returns structured hashtags with velocity scores + viral angles
+    """
+    result = await service_get_trends(topic, platform)
+    return result

@@ -291,3 +291,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+//app/page.tsx

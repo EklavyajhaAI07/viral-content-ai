@@ -26,7 +26,6 @@ YOUTUBE_KEY  = os.getenv("YOUTUBE_API_KEY", "")
 
 
 # ── MongoDB document schema ───────────────────────────────────────────────────
-# These are the document shapes stored in MongoDB collection: "trend_documents"
 
 def make_trend_document(
     topic: str,
@@ -35,11 +34,6 @@ def make_trend_document(
     data: dict,
     geo_country: str = "global",
 ) -> dict:
-    """
-    Creates a MongoDB-ready trend document.
-    Collection: trend_documents
-    Index on: topic + platform + source + crawled_at
-    """
     doc_id = hashlib.sha256(
         f"{topic}:{platform}:{source}:{int(time.time()//3600)}".encode()
     ).hexdigest()[:16]
@@ -48,11 +42,11 @@ def make_trend_document(
         "_id":         doc_id,
         "topic":       topic,
         "platform":    platform,
-        "source":      source,         # "google_trends" | "youtube" | "crawl" | "pytrends"
+        "source":      source,
         "geo":         geo_country,
         "data":        data,
         "crawled_at":  datetime.now(timezone.utc).isoformat(),
-        "ttl_hours":   6,              # MongoDB TTL index should expire after 6h
+        "ttl_hours":   6,
         "schema_v":    2,
     }
 
@@ -67,10 +61,6 @@ def make_content_document(
     geo_country: str = "global",
     model_used: str = "unknown",
 ) -> dict:
-    """
-    Content generation result document.
-    Collection: content_documents
-    """
     return {
         "topic":           topic,
         "platform":        platform,
@@ -85,16 +75,16 @@ def make_content_document(
     }
 
 
-# ── Web crawler (Part F) ──────────────────────────────────────────────────────
+# ── Empty async fallback (replaces removed asyncio.coroutine) ─────────────────
+
+async def _empty_crawl() -> dict:
+    """Safe async no-op — returns empty hashtag suggestions."""
+    return {"hashtag_suggestions": [], "extracted_keywords": []}
+
+
+# ── Web crawler ───────────────────────────────────────────────────────────────
 
 class PlatformCrawler:
-    """
-    Lightweight async web crawler for platform trend pages.
-    Uses httpx + basic HTML parsing (no Selenium needed for most pages).
-    Respects rate limits and returns structured data.
-    """
-
-    # Public trend pages that don't require login
     CRAWL_URLS = {
         "instagram": [
             "https://later.com/blog/instagram-trends/",
@@ -118,7 +108,6 @@ class PlatformCrawler:
         ],
     }
 
-    # Geo-specific overrides
     GEO_CRAWL_URLS = {
         "IN": {
             "twitter": ["https://trends24.in/india/"],
@@ -140,10 +129,6 @@ class PlatformCrawler:
         max_pages: int = 2,
         rate_limit: float = 2.5,
     ) -> dict:
-        """
-        Crawl platform trend pages and extract useful text signals.
-        Returns structured data ready for agent consumption.
-        """
         urls = self._get_urls(platform, country_code)
         results = []
 
@@ -162,9 +147,7 @@ class PlatformCrawler:
         ) as client:
             for i, url in enumerate(urls[:max_pages]):
                 try:
-                    # Inject topic into URL if placeholder present
                     url = url.replace("{topic}", topic.replace(" ", "%20"))
-
                     resp = await client.get(url)
                     if resp.status_code != 200:
                         logger.warning(f"Crawl {url}: HTTP {resp.status_code}")
@@ -177,7 +160,6 @@ class PlatformCrawler:
                         "status": "ok",
                     })
 
-                    # Polite crawl delay
                     if i < len(urls) - 1:
                         await asyncio.sleep(rate_limit)
 
@@ -185,56 +167,41 @@ class PlatformCrawler:
                     logger.warning(f"Crawl error [{url}]: {e}")
                     results.append({"url": url, "status": "error", "error": str(e)})
 
-        # Extract keywords/hashtags from crawled content
         all_text = " ".join(
             str(r.get("data", "")) for r in results if r.get("status") == "ok"
         )
         keywords = self._extract_keywords(all_text, topic)
 
         return {
-            "platform":        platform,
-            "topic":           topic,
-            "country_code":    country_code,
-            "pages_crawled":   len([r for r in results if r.get("status") == "ok"]),
-            "raw_results":     results,
-            "extracted_keywords": keywords,
-            "hashtag_suggestions": [f"#{k.replace(' ','')}" for k in keywords[:10]],
-            "crawled_at":      datetime.now(timezone.utc).isoformat(),
+            "platform":               platform,
+            "topic":                  topic,
+            "country_code":           country_code,
+            "pages_crawled":          len([r for r in results if r.get("status") == "ok"]),
+            "raw_results":            results,
+            "extracted_keywords":     keywords,
+            "hashtag_suggestions":    [f"#{k.replace(' ','')}" for k in keywords[:10]],
+            "crawled_at":             datetime.now(timezone.utc).isoformat(),
         }
 
     def _get_urls(self, platform: str, country_code: str) -> list[str]:
         base = self.CRAWL_URLS.get(platform, [])
         geo_override = self.GEO_CRAWL_URLS.get(country_code, {}).get(platform, [])
-        # Geo-specific URLs first, then fallback to generic
         combined = geo_override + [u for u in base if u not in geo_override]
         return combined
 
     def _extract_text(self, html: str, platform: str) -> str:
-        """
-        Basic HTML text extraction without external dependencies.
-        Strips tags, returns clean text up to 3000 chars.
-        """
         import re
-        # Remove scripts, styles, nav
         html = re.sub(r'<(script|style|nav|header|footer)[^>]*>.*?</\1>', '', html, flags=re.DOTALL|re.IGNORECASE)
-        # Remove all HTML tags
         text = re.sub(r'<[^>]+>', ' ', html)
-        # Collapse whitespace
         text = re.sub(r'\s+', ' ', text).strip()
         return text[:3000]
 
     def _extract_keywords(self, text: str, seed_topic: str) -> list[str]:
-        """
-        Simple keyword extraction: frequency-based, filtered by relevance.
-        No NLTK needed — pure Python.
-        """
         import re
         from collections import Counter
 
-        # Tokenize
         words = re.findall(r'\b[a-zA-Z][a-zA-Z0-9]{3,}\b', text.lower())
 
-        # Stopwords
         STOP = {
             "this","that","with","from","have","been","will","your","more",
             "also","they","their","what","when","where","which","would",
@@ -243,10 +210,7 @@ class PlatformCrawler:
         }
         words = [w for w in words if w not in STOP]
 
-        # Count and pick top
         counts = Counter(words)
-
-        # Boost words that appear near the seed topic
         seed_words = seed_topic.lower().split()
         boosted = {
             w: count * (2 if any(s in w or w in s for s in seed_words) else 1)
@@ -270,7 +234,7 @@ async def fetch_google_trends(topic: str, geo: str = "") -> dict:
             "api_key":   SERPAPI_KEY,
         }
         if geo:
-            params["geo"] = geo  # e.g. "IN", "GB"
+            params["geo"] = geo
 
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get("https://serpapi.com/search", params=params)
@@ -287,10 +251,10 @@ async def fetch_google_trends(topic: str, geo: str = "") -> dict:
                 })
 
         return {
-            "source":           "google_trends",
-            "topic":            topic,
-            "geo":              geo,
-            "related_queries":  related,
+            "source":             "google_trends",
+            "topic":              topic,
+            "geo":                geo,
+            "related_queries":    related,
             "interest_over_time": data.get("interest_over_time", {}).get("timeline_data", [])[-5:],
         }
     except Exception as e:
@@ -336,13 +300,13 @@ async def fetch_youtube_trends(topic: str, max_results: int = 10) -> dict:
             resp = await client.get(
                 "https://www.googleapis.com/youtube/v3/search",
                 params={
-                    "part":          "snippet",
-                    "q":             topic,
-                    "type":          "video",
-                    "order":         "viewCount",
+                    "part":           "snippet",
+                    "q":              topic,
+                    "type":           "video",
+                    "order":          "viewCount",
                     "publishedAfter": _days_ago(3),
-                    "maxResults":    max_results,
-                    "key":           YOUTUBE_KEY,
+                    "maxResults":     max_results,
+                    "key":            YOUTUBE_KEY,
                 },
             )
             resp.raise_for_status()
@@ -416,10 +380,12 @@ async def fetch_all_trends(
         fetch_google_trends_interest(topic, geo=country_code),
         fetch_youtube_trends(topic),
     ]
+
+    # ✅ FIXED: replaced removed asyncio.coroutine with a proper async function
     if enable_crawl and platform != "all":
         tasks.append(crawler.crawl_platform(platform, topic, country_code))
     else:
-        tasks.append(asyncio.coroutine(lambda: {"hashtag_suggestions": []})())
+        tasks.append(_empty_crawl())
 
     google_data, google_topics, youtube_data, crawl_data = await asyncio.gather(*tasks)
 
@@ -435,22 +401,21 @@ async def fetch_all_trends(
     for q in google_data.get("related_queries", []):
         hashtags.append("#" + q["query"].replace(" ", "").lower()[:30])
     hashtags += crawl_data.get("hashtag_suggestions", [])
-    hashtags = list(dict.fromkeys(hashtags))[:15]  # dedup, limit 15
+    hashtags = list(dict.fromkeys(hashtags))[:15]
 
     result = {
-        "topic":             topic,
-        "platform":          platform,
-        "geo":               country_code,
-        "google_trends":     google_data,
-        "rising_topics":     google_topics.get("rising_topics", []),
-        "youtube_trending":  youtube_data,
-        "crawl_data":        crawl_data,
-        "extracted_keywords":crawl_data.get("extracted_keywords", []),
-        "suggested_hashtags":hashtags,
-        "sources":           ["google_trends", "youtube", "web_crawl"],
+        "topic":              topic,
+        "platform":           platform,
+        "geo":                country_code,
+        "google_trends":      google_data,
+        "rising_topics":      google_topics.get("rising_topics", []),
+        "youtube_trending":   youtube_data,
+        "crawl_data":         crawl_data,
+        "extracted_keywords": crawl_data.get("extracted_keywords", []),
+        "suggested_hashtags": hashtags,
+        "sources":            ["google_trends", "youtube", "web_crawl"],
     }
 
-    # Return MongoDB document alongside result for storage
     result["_mongo_doc"] = make_trend_document(
         topic=topic,
         platform=platform,
@@ -462,13 +427,12 @@ async def fetch_all_trends(
     return result
 
 
-# ── Pytrends fallback (no API key needed) ────────────────────────────────────
+# ── Pytrends fallback (no API key needed) ─────────────────────────────────────
 
 async def fetch_pytrends_fallback(topic: str, geo: str = "US") -> dict:
     """Fallback trend data using pytrends (Google Trends unofficial)."""
     try:
         from pytrends.request import TrendReq
-        import asyncio
 
         def _sync_fetch():
             pt = TrendReq(hl="en-US", tz=0)

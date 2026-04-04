@@ -2,6 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-56.4%25-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-38.2%25-3178c6)
+![CSS](https://img.shields.io/badge/CSS-4.9%25-000)
 ![Next.js](https://img.shields.io/badge/Next.js-App%20Router-black)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)  
 ![Stars](https://img.shields.io/badge/Stars-0-informational)
@@ -130,7 +131,7 @@ Creating consistently viral content is hard: you need trend awareness, platform-
 
 ---
 
-## Installation & Setup
+## Installation & Setup Guide
 
 > See `backend/README_SETUP.md` for backend-specific setup notes.
 
@@ -219,17 +220,17 @@ pytest
 
 ## Screenshots
 
-![WhatsApp Image 2026-04-04 at 2 34 52 PM](https://github.com/user-attachments/assets/fa079774-347a-437f-8879-bdc999553d7d)
+  ![WhatsApp Image 2026-04-04 at 2 34 52 PM](https://github.com/user-attachments/assets/fa079774-347a-437f-8879-bdc999553d7d)
 
 
-![WhatsApp Image 2026-04-04 at 2 34 52 PM (1)](https://github.com/user-attachments/assets/ca8bddf2-21c9-41b5-bd4f-ad8412b54bf7)
+  ![WhatsApp Image 2026-04-04 at 2 34 52 PM (1)](https://github.com/user-attachments/assets/ca8bddf2-21c9-41b5-bd4f-ad8412b54bf7)
 
 
 ---
 
 ## Demo
 
-Coming soon.
+We are currently under Development.
 
 ---
 

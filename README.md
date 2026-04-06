@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-56.4%25-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-38.2%25-3178c6)
-![CSS](https://img.shields.io/badge/CSS-4.9%25-000)
+![CSS](https://img.shields.io/badge/CSS-4.9%25-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-App%20Router-black)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)  
 ![Stars](https://img.shields.io/badge/Stars-0-informational)
